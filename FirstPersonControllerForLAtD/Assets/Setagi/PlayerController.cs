@@ -10,11 +10,20 @@ using System.Collections;
 
 public class PlayerController : MonoBehaviour
 {
+    private bool WalkFlag = false;
+    private string GroundTag;
+    public AudioClip Walk;
+    public AudioClip Jump;
+    public AudioClip Wall;
     public AudioSource audioSource;
     private float MaxY;
     public float Speed = 0.3f;
     private float SpeedBuf;
     public float JumpForce = 1f;
+
+    private Vector3 previousPosition;
+    private Vector3 currentVelocity;
+
 
 
     [SerializeField] private float sensitivity = 3; // чувствительность мышки
@@ -25,6 +34,7 @@ public class PlayerController : MonoBehaviour
 
     //!!!!Нацепите на него нестандартный Layer, например Player!!!!
     public LayerMask GroundLayer; // 1 == "Default"
+    public LayerMask WallLayer;
 
     private Rigidbody _rb;
     private Collider _collider;
@@ -85,6 +95,18 @@ public class PlayerController : MonoBehaviour
         }
     }
 
+    public Vector3 CalculateVelocity(Vector3 currentPosition)
+    {
+        float deltaTime = Time.deltaTime;
+
+        // Защита от деления на ноль
+        if (deltaTime <= 0f)
+            return Vector3.zero;
+
+        // Скорость = изменение позиции / время
+        return (currentPosition - previousPosition) / deltaTime;
+    }
+
     private Vector3 _movementVector
     {
         get
@@ -100,6 +122,7 @@ public class PlayerController : MonoBehaviour
 
     void Start()
     {
+        previousPosition = transform.position;
         SpeedBuf = Speed;
         //GroundLayer.value = 6;
         Cursor.visible = false;
@@ -118,9 +141,22 @@ public class PlayerController : MonoBehaviour
             Debug.LogError("Player SortingLayer must be different from Ground SourtingLayer!");
     }
 
+    private IEnumerator WalkSteps(float strength)
+    {
+        WalkFlag = true;
+        if (GroundTag == "Dirt")
+        audioSource.PlayOneShot(Walk);
+        //else if (GroundTag ==
+        if (strength >= 1)
+            yield return new WaitForSeconds(2 / strength);
+        else
+            yield return new WaitForSeconds(3);
+        WalkFlag = false;
+    }
 
     private void Update()
     {
+        
         if (!_isGrounded)
         {
             if (transform.position.y> MaxY)
@@ -128,9 +164,14 @@ public class PlayerController : MonoBehaviour
                 MaxY = transform.position.y;
             } 
         }
+        if (currentVelocity.magnitude != 0 && _isGrounded)
+        {
+            if (!WalkFlag)
+            StartCoroutine(WalkSteps(currentVelocity.magnitude));
+        }
         if (Input.GetKey(KeyCode.LeftShift))
         {
-            Speed = SpeedBuf*2;
+            Speed = SpeedBuf * 2;
         }
         else Speed = SpeedBuf;
         X = Input.GetAxis("Mouse X") * sensitivity;
@@ -141,16 +182,26 @@ public class PlayerController : MonoBehaviour
     }
     void FixedUpdate()
     {
+        // Вычисляем скорость
+        currentVelocity = CalculateVelocity(transform.position);
+
+        // Обновляем предыдущую позицию для следующего кадра
+        previousPosition = transform.position;
         JumpLogic();
         MoveLogic();
     }
     private void OnCollisionEnter(Collision collision)
     {
-        if (Mathf.Pow(2, collision.gameObject.layer) ==GroundLayer.value)
+        if (Mathf.Pow(2, collision.gameObject.layer) == GroundLayer.value)
         {
+            GroundTag = collision.gameObject.tag;
             StartCoroutine(Slow(MaxY-transform.position.y));
-            print(MaxY - transform.position.y);
+            //print(MaxY - transform.position.y);
             MaxY = 0;
+        }
+        if (Mathf.Pow(2, collision.gameObject.layer) == WallLayer.value)
+        {
+            audioSource.PlayOneShot(Wall);
         }
     }
     
